@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111111">
+<title>TikTok Comment Assistant</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f5f5f7;color:#111;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.wrap,main{max-width:680px;margin:auto;padding:18px 14px 45px}header{padding:6px 4px 12px}h1{font-size:27px;margin:0 0 6px}h2{font-size:18px;margin:0 0 13px}p{line-height:1.4}.card{background:#fff;border-radius:18px;padding:17px;margin:12px 0;box-shadow:0 2px 12px rgba(0,0,0,.06)}input,textarea{width:100%;border:1px solid #d2d2d7;border-radius:12px;padding:12px;font:inherit;background:#fff;margin:5px 0 10px}label{display:block;font-weight:600;margin-top:8px}button{border:0;border-radius:12px;padding:12px 15px;font:inherit;font-weight:700;margin:5px 3px 0 0}.primary{background:#111;color:#fff}.secondary{background:#e9e9ed;color:#111}.danger{background:#b42318;color:#fff}.actions{display:flex;justify-content:space-between;margin-top:8px}.row{display:flex;width:100%;justify-content:space-between;background:#f2f2f7;margin:5px 0;text-align:left}.filter,.preset{background:#e9e9ed}.filter.active{background:#111;color:#fff}.hint{color:#666;font-size:14px}.url{font-size:13px;color:#666;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.filters{display:flex;gap:4px;flex-wrap:wrap}@media(max-width:420px){h1{font-size:24px}main{padding:12px 10px 35px}}
+
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>TikTok Comment Assistant</h1>
+    <p>iPhone-only comment helper. TikTok posting stays under your control.</p>
+  </header>
+
+  <section class="card">
+    <h2>1. Add a TikTok video</h2>
+    <input id="url" type="url" placeholder="Paste TikTok video URL">
+    <button id="add" class="primary">Add video</button>
+    <button id="openTikTok" class="secondary">Open TikTok</button>
+    <p class="hint">On iPhone, use TikTok's Share → Copy Link, then return here and paste it.</p>
+  </section>
+
+  <section class="card">
+    <h2>2. Current video</h2>
+    <div id="empty">No video selected.</div>
+    <div id="current" hidden>
+      <p class="url" id="currentUrl"></p>
+      <label>Likes</label>
+      <input id="likes" type="number" min="0" placeholder="Enter visible like count">
+      <button id="under10" class="secondary">Mark under 10 likes</button>
+
+      <label>Comment</label>
+      <textarea id="comment" rows="4" placeholder="Write your comment..."></textarea>
+
+      <button id="copy" class="primary">Copy comment</button>
+      <button id="openCurrent" class="secondary">Open this TikTok</button>
+      <div class="actions">
+        <button id="skip" class="secondary">Skip</button>
+        <button id="posted" class="primary">Mark as posted</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Queue</h2>
+    <div class="filters">
+      <button data-filter="all" class="filter active">All</button>
+      <button data-filter="under10" class="filter">Under 10</button>
+      <button data-filter="pending" class="filter">Pending</button>
+    </div>
+    <div id="queue"></div>
+  </section>
+
+  <section class="card">
+    <h2>Quick comments</h2>
+    <div id="presets"></div>
+    <input id="presetInput" placeholder="New quick comment">
+    <button id="savePreset" class="secondary">Save quick comment</button>
+  </section>
+
+  <section class="card">
+    <button id="clear" class="danger">Clear all local data</button>
+    <p class="hint">Data is stored locally in this browser on your iPhone.</p>
+  </section>
+</main>
+<script>
+const KEY="tca_ios_v1";
+let db=JSON.parse(localStorage.getItem(KEY)||'{"videos":[],"presets":["Nice one!","This is actually so good.","Clean.","Love this."]}');
+let currentId=null, filter="all";
+
+const $=id=>document.getElementById(id);
+function save(){localStorage.setItem(KEY,JSON.stringify(db));render();}
+function current(){return db.videos.find(v=>v.id===currentId);}
+function status(v){return v.posted?"posted":v.skipped?"skipped":"pending";}
+function render(){
+  const v=current();
+  $("empty").hidden=!!v; $("current").hidden=!v;
+  if(v){
+    $("currentUrl").textContent=v.url;
+    $("likes").value=v.likes??"";
+    $("comment").value=v.comment||"";
+  }
+  let list=db.videos.filter(v=>{
+    if(filter==="under10") return Number.isFinite(v.likes)&&v.likes<10;
+    if(filter==="pending") return status(v)==="pending";
+    return true;
+  });
+  $("queue").innerHTML=list.length?list.map(v=>`
+    <button class="row" data-id="${v.id}">
+      <span>${Number.isFinite(v.likes)?v.likes+" likes":"likes unknown"}</span>
+      <b>${status(v)}</b>
+    </button>`).join(""):"<p class='hint'>No videos here.</p>";
+  document.querySelectorAll(".row").forEach(x=>x.onclick=()=>{
+    currentId=x.dataset.id; render();
+    window.scrollTo({top:document.body.scrollHeight/3,behavior:"smooth"});
+  });
+  $("presets").innerHTML=db.presets.map((p,i)=>
+    `<button class="preset" data-i="${i}">${escapeHtml(p)}</button>`).join("");
+  document.querySelectorAll(".preset").forEach(x=>x.onclick=()=>{
+    const v=current(); if(!v)return;
+    $("comment").value=db.presets[Number(x.dataset.i)]; v.comment=$("comment").value; save();
+  });
+}
+function escapeHtml(s){return s.replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+
+$("add").onclick=()=>{
+  const url=$("url").value.trim();
+  if(!url){alert("Paste a TikTok video URL first.");return;}
+  if(!url.includes("tiktok.com")){alert("That does not look like a TikTok URL.");return;}
+  const existing=db.videos.find(v=>v.url===url);
+  if(existing) currentId=existing.id;
+  else{
+    const v={id:crypto.randomUUID(),url,likes:null,comment:"",posted:false,skipped:false,created:Date.now()};
+    db.videos.unshift(v); currentId=v.id;
+  }
+  $("url").value=""; save();
+};
+$("likes").oninput=()=>{const v=current();if(!v)return;v.likes=$("likes").value===""?null:Number($("likes").value);save()};
+$("comment").oninput=()=>{const v=current();if(v){v.comment=$("comment").value;localStorage.setItem(KEY,JSON.stringify(db))}};
+$("copy").onclick=async()=>{
+  const v=current();if(!v)return;
+  if(!v.comment.trim()){alert("Enter a comment first.");return}
+  await navigator.clipboard.writeText(v.comment.trim());
+  alert("Comment copied. Open TikTok and paste it into the comment box.");
+};
+$("openCurrent").onclick=()=>{const v=current();if(v)location.href=v.url};
+$("openTikTok").onclick=()=>location.href="https://www.tiktok.com/";
+$("posted").onclick=()=>{const v=current();if(v){v.posted=true;v.skipped=false;save()}};
+$("skip").onclick=()=>{const v=current();if(v){v.skipped=true;v.posted=false;save()}};
+$("under10").onclick=()=>{const v=current();if(v){v.likes=9;$("likes").value=9;save()}};
+document.querySelectorAll(".filter").forEach(x=>x.onclick=()=>{
+  filter=x.dataset.filter;
+  document.querySelectorAll(".filter").forEach(b=>b.classList.toggle("active",b===x));
+  render();
+});
+$("savePreset").onclick=()=>{
+  const x=$("presetInput").value.trim();if(!x)return;
+  db.presets.push(x);$("presetInput").value="";save();
+};
+$("clear").onclick=()=>{
+  if(confirm("Delete all locally stored videos and comments?")){
+    db={videos:[],presets:[]};currentId=null;save();
+  }
+};
+render();
+
+</script>
+</body>
+</html>
